@@ -26,7 +26,7 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
     tags: '',
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title.trim()) return
 
@@ -50,7 +50,7 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
       createdAt: now,
       updatedAt: now,
     }
-    addPaper(paper)
+    await addPaper(paper)
     onAdded()
     onClose()
   }

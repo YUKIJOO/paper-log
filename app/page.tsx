@@ -22,7 +22,7 @@ export default function Home() {
   const [tag, setTag] = useState('')
   const [showModal, setShowModal] = useState(false)
 
-  const load = () => setPapers(getPapers())
+  const load = async () => setPapers(await getPapers())
   useEffect(() => { load() }, [])
 
   const allTags = useMemo(() => {

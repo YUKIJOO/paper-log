@@ -27,16 +27,17 @@ export default function PaperDetailClient({ id }: { id: string }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => {
-    const p = getPaperById(id)
-    if (!p) { router.push('/'); return }
-    setPaper(p)
+    getPaperById(id).then(p => {
+      if (!p) { router.push('/'); return }
+      setPaper(p)
+    })
   }, [id, router])
 
   if (!paper) return null
 
-  const save = (patch: Partial<Paper>) => {
+  const save = async (patch: Partial<Paper>) => {
     const updated = { ...paper, ...patch, updatedAt: new Date().toISOString() }
-    updatePaper(updated)
+    await updatePaper(updated)
     setPaper(updated)
   }
 
@@ -49,18 +50,18 @@ export default function PaperDetailClient({ id }: { id: string }) {
     setEditing(t)
   }
 
-  const handleEditSave = () => {
-    if (editing === 'summary') save({ summary: draft })
-    else if (editing === 'notes') save({ notes: draft })
+  const handleEditSave = async () => {
+    if (editing === 'summary') await save({ summary: draft })
+    else if (editing === 'notes') await save({ notes: draft })
     else if (editing === 'contributions') {
       const lines = contributionDraft.split('\n').map(l => l.trim()).filter(Boolean)
-      save({ keyContributions: lines })
+      await save({ keyContributions: lines })
     }
     setEditing(null)
   }
 
-  const handleDelete = () => {
-    deletePaper(paper.id)
+  const handleDelete = async () => {
+    await deletePaper(paper.id)
     router.push('/')
   }
 

@@ -1,42 +1,89 @@
 'use client'
 
 import { Paper } from './types'
+import { supabase } from './supabase'
 
-const STORAGE_KEY = 'paper_log_papers'
-
-export function getPapers(): Paper[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    return JSON.parse(raw) as Paper[]
-  } catch {
-    return []
+// DB row → Paper 변환
+function rowToPaper(row: Record<string, unknown>): Paper {
+  return {
+    id: row.id as string,
+    title: row.title as string,
+    authors: (row.authors as string[]) ?? [],
+    venue: (row.venue as string) ?? '',
+    year: (row.year as number) ?? new Date().getFullYear(),
+    url: (row.url as string) ?? '',
+    abstract: (row.abstract as string) ?? '',
+    summary: (row.summary as string) ?? '',
+    keyContributions: (row.key_contributions as string[]) ?? [],
+    notes: (row.notes as string) ?? '',
+    tags: (row.tags as string[]) ?? [],
+    category: (row.category as string) ?? '',
+    status: (row.status as Paper['status']) ?? 'to-read',
+    rating: (row.rating as Paper['rating']) ?? 0,
+    readAt: row.read_at as string | undefined,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
   }
 }
 
-export function savePapers(papers: Paper[]): void {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(papers))
+// Paper → DB row 변환
+function paperToRow(paper: Paper) {
+  return {
+    id: paper.id,
+    title: paper.title,
+    authors: paper.authors,
+    venue: paper.venue,
+    year: paper.year,
+    url: paper.url,
+    abstract: paper.abstract,
+    summary: paper.summary,
+    key_contributions: paper.keyContributions,
+    notes: paper.notes,
+    tags: paper.tags,
+    category: paper.category,
+    status: paper.status,
+    rating: paper.rating,
+    read_at: paper.readAt ?? null,
+    created_at: paper.createdAt,
+    updated_at: paper.updatedAt,
+  }
 }
 
-export function addPaper(paper: Paper): void {
-  const papers = getPapers()
-  savePapers([paper, ...papers])
+export async function getPapers(): Promise<Paper[]> {
+  const { data, error } = await supabase
+    .from('papers')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) { console.error(error); return [] }
+  return (data ?? []).map(rowToPaper)
 }
 
-export function updatePaper(updated: Paper): void {
-  const papers = getPapers()
-  savePapers(papers.map(p => (p.id === updated.id ? updated : p)))
+export async function addPaper(paper: Paper): Promise<void> {
+  const { error } = await supabase.from('papers').insert(paperToRow(paper))
+  if (error) console.error(error)
 }
 
-export function deletePaper(id: string): void {
-  const papers = getPapers()
-  savePapers(papers.filter(p => p.id !== id))
+export async function updatePaper(paper: Paper): Promise<void> {
+  const { error } = await supabase
+    .from('papers')
+    .update(paperToRow(paper))
+    .eq('id', paper.id)
+  if (error) console.error(error)
 }
 
-export function getPaperById(id: string): Paper | undefined {
-  return getPapers().find(p => p.id === id)
+export async function deletePaper(id: string): Promise<void> {
+  const { error } = await supabase.from('papers').delete().eq('id', id)
+  if (error) console.error(error)
+}
+
+export async function getPaperById(id: string): Promise<Paper | undefined> {
+  const { data, error } = await supabase
+    .from('papers')
+    .select('*')
+    .eq('id', id)
+    .single()
+  if (error) { console.error(error); return undefined }
+  return data ? rowToPaper(data) : undefined
 }
 
 export function generateId(): string {
