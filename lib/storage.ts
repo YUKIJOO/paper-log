@@ -3,7 +3,6 @@
 import { Paper } from './types'
 import { supabase } from './supabase'
 
-// DB row → Paper 변환
 function rowToPaper(row: Record<string, unknown>): Paper {
   return {
     id: row.id as string,
@@ -16,6 +15,12 @@ function rowToPaper(row: Record<string, unknown>): Paper {
     summary: (row.summary as string) ?? '',
     keyContributions: (row.key_contributions as string[]) ?? [],
     notes: (row.notes as string) ?? '',
+    introduction: (row.introduction as string) ?? '',
+    literatureReview: (row.literature_review as string) ?? '',
+    method: (row.method as string) ?? '',
+    results: (row.results as string) ?? '',
+    discussion: (row.discussion as string) ?? '',
+    limitation: (row.limitation as string) ?? '',
     tags: (row.tags as string[]) ?? [],
     category: (row.category as string) ?? '',
     status: (row.status as Paper['status']) ?? 'to-read',
@@ -26,7 +31,6 @@ function rowToPaper(row: Record<string, unknown>): Paper {
   }
 }
 
-// Paper → DB row 변환
 function paperToRow(paper: Paper) {
   return {
     id: paper.id,
@@ -39,6 +43,12 @@ function paperToRow(paper: Paper) {
     summary: paper.summary,
     key_contributions: paper.keyContributions,
     notes: paper.notes,
+    introduction: paper.introduction,
+    literature_review: paper.literatureReview,
+    method: paper.method,
+    results: paper.results,
+    discussion: paper.discussion,
+    limitation: paper.limitation,
     tags: paper.tags,
     category: paper.category,
     status: paper.status,

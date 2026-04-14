@@ -11,6 +11,13 @@ export interface Paper {
   summary: string
   keyContributions: string[]
   notes: string
+  // 6개 섹션
+  introduction: string
+  literatureReview: string
+  method: string
+  results: string
+  discussion: string
+  limitation: string
   tags: string[]
   category: string
   status: PaperStatus
