@@ -11,6 +11,33 @@ interface Props {
 
 const CATEGORIES = ['NLP', 'CV', 'RL', 'ML', 'Multimodal', 'AI Safety', 'Robotics', '기타']
 
+async function fetchPaperInfo(title: string) {
+  const res = await fetch(
+    `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(title)}&limit=1&fields=title,authors,year,venue,externalIds,abstract`
+  )
+  if (!res.ok) return null
+  const data = await res.json()
+  const paper = data.data?.[0]
+  if (!paper) return null
+
+  const arxivId = paper.externalIds?.ArXiv
+  const doi = paper.externalIds?.DOI
+  const url = arxivId
+    ? `https://arxiv.org/abs/${arxivId}`
+    : doi
+    ? `https://doi.org/${doi}`
+    : ''
+
+  return {
+    title: paper.title ?? '',
+    authors: (paper.authors ?? []).map((a: { name: string }) => a.name).join(', '),
+    year: paper.year?.toString() ?? '',
+    venue: paper.venue ?? '',
+    url,
+    abstract: paper.abstract ?? '',
+  }
+}
+
 export default function AddPaperModal({ onClose, onAdded }: Props) {
   const [form, setForm] = useState({
     title: '',
@@ -25,6 +52,27 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
     rating: 0,
     tags: '',
   })
+  const [fetching, setFetching] = useState(false)
+  const [fetchResult, setFetchResult] = useState<'success' | 'fail' | null>(null)
+
+  const handleAutoFill = async () => {
+    if (!form.title.trim()) return
+    setFetching(true)
+    setFetchResult(null)
+    const info = await fetchPaperInfo(form.title.trim())
+    setFetching(false)
+    if (!info) { setFetchResult('fail'); return }
+    setForm(prev => ({
+      ...prev,
+      title: info.title || prev.title,
+      authors: info.authors || prev.authors,
+      year: info.year || prev.year,
+      venue: info.venue || prev.venue,
+      url: info.url || prev.url,
+      abstract: info.abstract || prev.abstract,
+    }))
+    setFetchResult('success')
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,6 +106,17 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
   const set = (key: string, value: string | number) =>
     setForm(prev => ({ ...prev, [key]: value }))
 
+  const inputStyle = {
+    background: 'var(--surface-hover)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-primary)',
+  }
+  const inputClass = 'w-full text-sm px-3 py-2.5 rounded-lg outline-none transition-all'
+  const onFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    (e.currentTarget.style.borderColor = 'var(--accent)')
+  const onBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    (e.currentTarget.style.borderColor = 'var(--border)')
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -86,25 +145,68 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {/* Title */}
+          {/* Title + 자동 채우기 */}
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
               제목 <span style={{ color: 'var(--accent)' }}>*</span>
             </label>
-            <input
-              value={form.title}
-              onChange={e => set('title', e.target.value)}
-              placeholder="논문 제목을 입력하세요"
-              required
-              className="w-full text-sm px-3 py-2.5 rounded-lg outline-none transition-all"
-              style={{
-                background: 'var(--surface-hover)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-              onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-            />
+            <div className="flex gap-2">
+              <input
+                value={form.title}
+                onChange={e => { set('title', e.target.value); setFetchResult(null) }}
+                placeholder="논문 제목을 입력하세요"
+                required
+                className={`${inputClass} flex-1`}
+                style={inputStyle}
+                onFocus={onFocus}
+                onBlur={onBlur}
+              />
+              <button
+                type="button"
+                onClick={handleAutoFill}
+                disabled={fetching || !form.title.trim()}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all disabled:opacity-40"
+                style={{
+                  background: fetchResult === 'success' ? '#10b98120' : 'var(--accent-light)',
+                  color: fetchResult === 'success' ? '#10b981' : 'var(--accent)',
+                  border: `1px solid ${fetchResult === 'success' ? '#10b98140' : 'var(--accent-light)'}`,
+                }}
+              >
+                {fetching ? (
+                  <>
+                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="14" strokeDashoffset="5" />
+                    </svg>
+                    검색 중
+                  </>
+                ) : fetchResult === 'success' ? (
+                  <>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    완료
+                  </>
+                ) : (
+                  <>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <circle cx="5.5" cy="5.5" r="3.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M9 9l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                    </svg>
+                    자동 채우기
+                  </>
+                )}
+              </button>
+            </div>
+            {fetchResult === 'fail' && (
+              <p className="text-xs mt-1.5" style={{ color: '#ef4444' }}>
+                논문을 찾지 못했어요. 직접 입력해주세요.
+              </p>
+            )}
+            {fetchResult === 'success' && (
+              <p className="text-xs mt-1.5" style={{ color: '#10b981' }}>
+                정보를 자동으로 채웠어요. 확인 후 수정하세요.
+              </p>
+            )}
           </div>
 
           {/* Authors */}
@@ -116,14 +218,10 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
               value={form.authors}
               onChange={e => set('authors', e.target.value)}
               placeholder="Vaswani, A., Shazeer, N., ..."
-              className="w-full text-sm px-3 py-2.5 rounded-lg outline-none transition-all"
-              style={{
-                background: 'var(--surface-hover)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-              onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+              className={inputClass}
+              style={inputStyle}
+              onFocus={onFocus}
+              onBlur={onBlur}
             />
           </div>
 
@@ -137,14 +235,10 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
                 value={form.venue}
                 onChange={e => set('venue', e.target.value)}
                 placeholder="NeurIPS, ICML, ..."
-                className="w-full text-sm px-3 py-2.5 rounded-lg outline-none transition-all"
-                style={{
-                  background: 'var(--surface-hover)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                }}
-                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                className={inputClass}
+                style={inputStyle}
+                onFocus={onFocus}
+                onBlur={onBlur}
               />
             </div>
             <div>
@@ -157,14 +251,10 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
                 type="number"
                 min="1900"
                 max="2099"
-                className="w-full text-sm px-3 py-2.5 rounded-lg outline-none transition-all"
-                style={{
-                  background: 'var(--surface-hover)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                }}
-                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                className={inputClass}
+                style={inputStyle}
+                onFocus={onFocus}
+                onBlur={onBlur}
               />
             </div>
           </div>
@@ -178,16 +268,30 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
               value={form.url}
               onChange={e => set('url', e.target.value)}
               placeholder="https://arxiv.org/abs/..."
-              className="w-full text-sm px-3 py-2.5 rounded-lg outline-none transition-all"
-              style={{
-                background: 'var(--surface-hover)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-              onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+              className={inputClass}
+              style={inputStyle}
+              onFocus={onFocus}
+              onBlur={onBlur}
             />
           </div>
+
+          {/* Abstract */}
+          {form.abstract && (
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                Abstract
+              </label>
+              <textarea
+                value={form.abstract}
+                onChange={e => set('abstract', e.target.value)}
+                rows={3}
+                className={`${inputClass} resize-none`}
+                style={inputStyle}
+                onFocus={onFocus}
+                onBlur={onBlur}
+              />
+            </div>
+          )}
 
           {/* Category + Status */}
           <div className="grid grid-cols-2 gap-3">
@@ -198,14 +302,10 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
               <select
                 value={form.category}
                 onChange={e => set('category', e.target.value)}
-                className="w-full text-sm px-3 py-2.5 rounded-lg outline-none transition-all appearance-none"
-                style={{
-                  background: 'var(--surface-hover)',
-                  border: '1px solid var(--border)',
-                  color: form.category ? 'var(--text-primary)' : 'var(--text-muted)',
-                }}
-                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                className={`${inputClass} appearance-none`}
+                style={{ ...inputStyle, color: form.category ? 'var(--text-primary)' : 'var(--text-muted)' }}
+                onFocus={onFocus}
+                onBlur={onBlur}
               >
                 <option value="">선택...</option>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -218,14 +318,10 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
               <select
                 value={form.status}
                 onChange={e => set('status', e.target.value)}
-                className="w-full text-sm px-3 py-2.5 rounded-lg outline-none transition-all appearance-none"
-                style={{
-                  background: 'var(--surface-hover)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-primary)',
-                }}
-                onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-                onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                className={`${inputClass} appearance-none`}
+                style={inputStyle}
+                onFocus={onFocus}
+                onBlur={onBlur}
               >
                 <option value="read">읽음</option>
                 <option value="reading">읽는 중</option>
@@ -265,14 +361,10 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
               onChange={e => set('summary', e.target.value)}
               placeholder="이 논문의 핵심 내용을 간략히 적어보세요..."
               rows={3}
-              className="w-full text-sm px-3 py-2.5 rounded-lg outline-none resize-none transition-all"
-              style={{
-                background: 'var(--surface-hover)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-              onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+              className={`${inputClass} resize-none`}
+              style={inputStyle}
+              onFocus={onFocus}
+              onBlur={onBlur}
             />
           </div>
 
@@ -285,14 +377,10 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
               value={form.tags}
               onChange={e => set('tags', e.target.value)}
               placeholder="attention, transformer, language-model"
-              className="w-full text-sm px-3 py-2.5 rounded-lg outline-none transition-all"
-              style={{
-                background: 'var(--surface-hover)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-              }}
-              onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-              onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+              className={inputClass}
+              style={inputStyle}
+              onFocus={onFocus}
+              onBlur={onBlur}
             />
           </div>
 
