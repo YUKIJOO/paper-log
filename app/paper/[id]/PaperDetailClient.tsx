@@ -122,7 +122,7 @@ export default function PaperDetailClient({ id }: { id: string }) {
       formData.append('file', file)
       const res = await fetch('/api/analyze-paper', { method: 'POST', body: formData })
       const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Analysis failed')
+      if (!res.ok || data.error) throw new Error(data.error ?? '알 수 없는 오류가 발생했습니다.')
       await save(data.sections)
     } catch (err) {
       setAnalyzeError(err instanceof Error ? err.message : '분석에 실패했습니다.')
