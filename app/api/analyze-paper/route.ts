@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+
+// DOMMatrix 폴리필 (pdf-parse 빌드 에러 방지)
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  (globalThis as Record<string, unknown>).DOMMatrix = class {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    constructor(..._args: any[]) {}
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse = require('pdf-parse') as (buffer: Buffer) => Promise<{ text: string }>
 
@@ -11,19 +20,16 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File | null
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
 
-    // 파일 텍스트 추출
-    let text = ''
     const buffer = Buffer.from(await file.arrayBuffer())
+    let text = ''
 
     if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
       const parsed = await pdfParse(buffer)
       text = parsed.text
     } else {
-      // txt, md 등 텍스트 파일
       text = buffer.toString('utf-8')
     }
 
-    // 너무 길면 앞부분만 사용 (Claude 컨텍스트 절약)
     const truncated = text.slice(0, 60000)
 
     const message = await client.messages.create({
@@ -52,8 +58,6 @@ ${truncated}`,
     })
 
     const raw = message.content[0].type === 'text' ? message.content[0].text : ''
-
-    // JSON 파싱
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
 
