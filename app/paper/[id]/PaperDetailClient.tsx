@@ -34,6 +34,8 @@ export default function PaperDetailClient({ id }: { id: string }) {
   const [draft, setDraft] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analyzeError, setAnalyzeError] = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -109,6 +111,26 @@ export default function PaperDetailClient({ id }: { id: string }) {
 
   const handleStatus = (s: PaperStatus) => save({ status: s })
   const handleRating = (r: number) => save({ rating: (paper.rating === r ? 0 : r) as Paper['rating'] })
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setAnalyzing(true)
+    setAnalyzeError('')
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/analyze-paper', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Analysis failed')
+      await save(data.sections)
+    } catch (err) {
+      setAnalyzeError(err instanceof Error ? err.message : '분석에 실패했습니다.')
+    } finally {
+      setAnalyzing(false)
+      e.target.value = ''
+    }
+  }
 
   const filledCount = SECTIONS.filter(s => (paper[s.key] as string)?.trim()).length
 
@@ -197,7 +219,7 @@ export default function PaperDetailClient({ id }: { id: string }) {
             )}
 
             {/* 링크 + 진행도 */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-5">
               {paper.url ? (
                 <a href={paper.url} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-xs transition-opacity hover:opacity-70"
@@ -212,6 +234,66 @@ export default function PaperDetailClient({ id }: { id: string }) {
               <span style={{ color: 'var(--text-muted)' }} className="text-xs">
                 {filledCount} / 6 섹션 작성됨
               </span>
+            </div>
+
+            {/* AI 분석 */}
+            <div
+              style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)' }}
+              className="rounded-xl p-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p style={{ color: 'var(--text-primary)' }} className="text-sm font-medium mb-0.5">
+                    AI로 논문 자동 분석
+                  </p>
+                  <p style={{ color: 'var(--text-muted)' }} className="text-xs">
+                    PDF 또는 텍스트 파일을 올리면 6개 섹션을 자동으로 채워드려요
+                  </p>
+                </div>
+                <label
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white cursor-pointer transition-opacity hover:opacity-90 whitespace-nowrap flex-shrink-0"
+                  style={{ background: analyzing ? 'var(--text-muted)' : 'var(--accent)', pointerEvents: analyzing ? 'none' : 'auto' }}
+                >
+                  {analyzing ? (
+                    <>
+                      <svg className="animate-spin" width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <circle cx="6.5" cy="6.5" r="5" stroke="white" strokeWidth="1.5" strokeDasharray="16" strokeDashoffset="6" />
+                      </svg>
+                      분석 중...
+                    </>
+                  ) : (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <path d="M6.5 1L8 4.5l3.5.5-2.5 2.5.5 3.5L6.5 9 3 11l.5-3.5L1 5l3.5-.5z" stroke="white" strokeWidth="1.2" strokeLinejoin="round" />
+                      </svg>
+                      파일 업로드
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept=".pdf,.txt,.md"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    disabled={analyzing}
+                  />
+                </label>
+              </div>
+              {analyzeError && (
+                <p className="text-xs mt-2" style={{ color: '#ef4444' }}>{analyzeError}</p>
+              )}
+              {analyzing && (
+                <div className="mt-3">
+                  <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                    <div
+                      className="h-full rounded-full animate-pulse"
+                      style={{ background: 'var(--accent)', width: '60%' }}
+                    />
+                  </div>
+                  <p style={{ color: 'var(--text-muted)' }} className="text-xs mt-1.5">
+                    Claude가 논문을 읽고 있어요. 1~2분 정도 소요됩니다...
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
