@@ -20,6 +20,7 @@ type Tab = 'summary' | 'notes' | 'contributions'
 export default function PaperDetailClient({ id }: { id: string }) {
   const router = useRouter()
   const [paper, setPaper] = useState<Paper | null>(null)
+  const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('summary')
   const [editing, setEditing] = useState<Tab | null>(null)
   const [draft, setDraft] = useState('')
@@ -27,13 +28,47 @@ export default function PaperDetailClient({ id }: { id: string }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => {
+    setLoading(true)
     getPaperById(id).then(p => {
-      if (!p) { router.push('/'); return }
-      setPaper(p)
+      setPaper(p ?? null)
+      setLoading(false)
     })
-  }, [id, router])
+  }, [id])
 
-  if (!paper) return null
+  if (loading) {
+    return (
+      <ThemeProvider>
+        <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+          <Header />
+          <div className="flex items-center justify-center py-40">
+            <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--accent)' }}>
+              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10" />
+            </svg>
+          </div>
+        </div>
+      </ThemeProvider>
+    )
+  }
+
+  if (!paper) {
+    return (
+      <ThemeProvider>
+        <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+          <Header />
+          <div className="flex flex-col items-center justify-center py-40 gap-4">
+            <p style={{ color: 'var(--text-secondary)' }} className="text-sm">논문을 찾을 수 없어요.</p>
+            <button
+              onClick={() => router.push('/')}
+              className="text-sm px-4 py-2 rounded-lg text-white"
+              style={{ background: 'var(--accent)' }}
+            >
+              목록으로
+            </button>
+          </div>
+        </div>
+      </ThemeProvider>
+    )
+  }
 
   const save = async (patch: Partial<Paper>) => {
     const updated = { ...paper, ...patch, updatedAt: new Date().toISOString() }
