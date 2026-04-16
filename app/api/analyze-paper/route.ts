@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Groq from 'groq-sdk'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
+import { GoogleGenAI } from '@google/genai'
 
 export const maxDuration = 120
 
-const client = new Groq({ apiKey: process.env.GROQ_API_KEY })
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
-const PROMPT = `논문을 분석하여 아래 6개 섹션을 한국어로 정리해주세요.
-각 섹션은 해당 파트의 내용만 읽고 작성하세요.
+const SYSTEM_INSTRUCTION = `당신은 한국어로 학술 논문을 분석하는 전문가입니다. 아래 규칙을 반드시 따르세요.
+
+[언어 규칙 - 절대 준수]
+1. 모든 내용은 반드시 순수한 한국어(한글)로 작성합니다.
+2. 한자(漢字), 중국어 간체자, 일본어 문자는 절대 사용하지 마세요. "體驗"→"체험", "文化"→"문화" 처럼 반드시 한글로 표기하세요.
+3. 영어는 고유명사(연구자 이름, 모델명, 통계 기법명)와 통계 수치(β, p, t 값)에만 허용합니다.
+4. 영어 원문을 직역하지 말고 한국 학술 독자가 자연스럽게 읽을 수 있는 문장으로 작성하세요.
+
+[내용 규칙]
+5. 각 섹션은 논문 내용을 충분히 반영하여 구체적이고 상세하게 작성하세요. 단순 나열이나 한 줄 요약은 금지입니다.
+6. 논문에 있는 수치, 가설 번호, 변수명은 정확하게 옮기세요.
+7. 이해하기 쉬운 명확한 문장으로 작성하세요.`
+
+const PROMPT = `위 논문을 분석하여 아래 6개 섹션을 한국어로 정리해주세요.
 
 반드시 아래 JSON 형식으로만 응답하세요. JSON 외에 다른 텍스트는 절대 포함하지 마세요.
 
@@ -32,44 +42,26 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
     const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf')
 
-    let text: string
-    if (isPdf) {
-      const parsed = await pdfParse(buffer)
-      text = parsed.text.slice(0, 15000)
-    } else {
-      text = buffer.toString('utf-8').slice(0, 15000)
-    }
+    const base64 = buffer.toString('base64')
+    const mimeType = isPdf ? 'application/pdf' : 'text/plain'
 
-    const message = await client.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 6000,
-      messages: [
-        {
-          role: 'system',
-          content: `당신은 한국어로 학술 논문을 분석하는 전문가입니다. 아래 규칙을 반드시 따르세요.
-
-[언어 규칙 - 절대 준수]
-1. 모든 내용은 반드시 순수한 한국어(한글)로 작성합니다.
-2. 한자(漢字), 중국어 간체자, 일본어 문자는 절대 사용하지 마세요. 예를 들어 "體驗", "文化", "場所" 같은 한자는 "체험", "문화", "장소"처럼 한글로만 표기하세요.
-3. 영어는 고유명사(연구자 이름, 모델명, 통계 기법명 등)와 통계 수치(β, p, t 값 등)에만 허용합니다.
-4. 영어 원문을 직역하지 말고, 한국 학술 독자가 자연스럽게 읽을 수 있는 문장으로 작성하세요.
-
-[내용 규칙]
-5. 각 섹션은 논문 내용을 충분히 반영하여 구체적이고 상세하게 작성하세요. 단순 나열이나 한 줄 요약은 금지합니다.
-6. 논문에 있는 수치, 가설 번호, 변수명은 정확하게 옮기세요.
-7. 이해하기 쉬운 명확한 문장으로 작성하세요.`,
-        },
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      config: { systemInstruction: SYSTEM_INSTRUCTION },
+      contents: [
         {
           role: 'user',
-          content: `${PROMPT}\n\n논문 전문:\n${text}`,
+          parts: [
+            { inlineData: { mimeType, data: base64 } },
+            { text: PROMPT },
+          ],
         },
       ],
     })
 
-    const raw = message.choices[0]?.message?.content ?? ''
-    console.log('Groq raw response:', raw.slice(0, 1000))
+    const raw = response.text ?? ''
+    console.log('Gemini raw response:', raw.slice(0, 500))
 
-    // 마크다운 코드블록 제거 후 JSON 추출
     const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
