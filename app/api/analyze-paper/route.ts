@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 export const maxDuration = 120
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
 const PROMPT = `이 논문을 읽고 아래 6개 섹션을 한국어로 상세하게 정리해주세요.
 
