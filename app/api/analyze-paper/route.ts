@@ -34,9 +34,9 @@ export async function POST(req: NextRequest) {
     let text: string
     if (isPdf) {
       const parsed = await pdfParse(buffer)
-      text = parsed.text.slice(0, 80000)
+      text = parsed.text.slice(0, 20000)
     } else {
-      text = buffer.toString('utf-8').slice(0, 80000)
+      text = buffer.toString('utf-8').slice(0, 20000)
     }
 
     const message = await client.chat.completions.create({
