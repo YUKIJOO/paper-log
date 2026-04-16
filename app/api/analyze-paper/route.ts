@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenAI } from '@google/genai'
+import OpenAI from 'openai'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
 
 export const maxDuration = 120
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 const SYSTEM_INSTRUCTION = `당신은 한국어로 학술 논문을 분석하는 전문가입니다. 아래 규칙을 반드시 따르세요.
 
@@ -42,45 +44,40 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
     const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf')
 
-    const base64 = buffer.toString('base64')
-    const mimeType = isPdf ? 'application/pdf' : 'text/plain'
+    let text: string
+    if (isPdf) {
+      const parsed = await pdfParse(buffer)
+      text = parsed.text.slice(0, 60000)
+    } else {
+      text = buffer.toString('utf-8').slice(0, 60000)
+    }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      config: { systemInstruction: SYSTEM_INSTRUCTION },
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { inlineData: { mimeType, data: base64 } },
-            { text: PROMPT },
-          ],
-        },
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 8000,
+      messages: [
+        { role: 'system', content: SYSTEM_INSTRUCTION },
+        { role: 'user', content: `${PROMPT}\n\n논문 전문:\n${text}` },
       ],
     })
 
-    const raw = response.text ?? ''
-    console.log('Gemini raw response:', raw.slice(0, 500))
-
+    const raw = response.choices[0]?.message?.content ?? ''
     const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
-      console.error('JSON 파싱 실패, 응답:', raw.slice(0, 500))
       return NextResponse.json({ error: `AI 응답 파싱에 실패했습니다. 응답: ${raw.slice(0, 200)}` }, { status: 500 })
     }
 
     let sections
     try {
       sections = JSON.parse(jsonMatch[0])
-    } catch (parseErr) {
-      console.error('JSON.parse 실패:', parseErr, jsonMatch[0].slice(0, 500))
+    } catch {
       return NextResponse.json({ error: 'AI 응답 JSON 파싱에 실패했습니다.' }, { status: 500 })
     }
     return NextResponse.json({ sections })
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('분석 실패:', msg)
     return NextResponse.json({ error: `분석 실패: ${msg}` }, { status: 500 })
   }
 }
