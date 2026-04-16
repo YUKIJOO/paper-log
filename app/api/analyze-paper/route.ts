@@ -51,13 +51,23 @@ export async function POST(req: NextRequest) {
     })
 
     const raw = message.choices[0]?.message?.content ?? ''
-    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    console.log('Groq raw response:', raw.slice(0, 1000))
+
+    // 마크다운 코드블록 제거 후 JSON 추출
+    const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       console.error('JSON 파싱 실패, 응답:', raw.slice(0, 500))
-      return NextResponse.json({ error: 'AI 응답 파싱에 실패했습니다.' }, { status: 500 })
+      return NextResponse.json({ error: `AI 응답 파싱에 실패했습니다. 응답: ${raw.slice(0, 200)}` }, { status: 500 })
     }
 
-    const sections = JSON.parse(jsonMatch[0])
+    let sections
+    try {
+      sections = JSON.parse(jsonMatch[0])
+    } catch (parseErr) {
+      console.error('JSON.parse 실패:', parseErr, jsonMatch[0].slice(0, 500))
+      return NextResponse.json({ error: 'AI 응답 JSON 파싱에 실패했습니다.' }, { status: 500 })
+    }
     return NextResponse.json({ sections })
 
   } catch (err) {
