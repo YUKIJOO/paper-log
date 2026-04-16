@@ -45,6 +45,10 @@ export async function POST(req: NextRequest) {
       max_tokens: 4096,
       messages: [
         {
+          role: 'system',
+          content: '당신은 학술 논문을 분석하는 전문가입니다. 반드시 자연스럽고 정확한 한국어로 작성하세요. 영어 원문 표현을 그대로 번역하지 말고, 한국 학술 독자가 읽기 편한 문장으로 의역하세요. 오타, 어색한 직역, 불필요한 영어 혼용은 금지입니다.',
+        },
+        {
           role: 'user',
           content: `${PROMPT}\n\n논문 전문:\n${text}`,
         },
