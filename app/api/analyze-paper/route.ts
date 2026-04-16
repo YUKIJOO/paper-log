@@ -35,14 +35,14 @@ export async function POST(req: NextRequest) {
     let text: string
     if (isPdf) {
       const parsed = await pdfParse(buffer)
-      text = parsed.text.slice(0, 20000)
+      text = parsed.text.slice(0, 15000)
     } else {
-      text = buffer.toString('utf-8').slice(0, 20000)
+      text = buffer.toString('utf-8').slice(0, 15000)
     }
 
     const message = await client.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
-      max_tokens: 4096,
+      max_tokens: 6000,
       messages: [
         {
           role: 'system',
