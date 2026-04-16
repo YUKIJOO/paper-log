@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import Groq from 'groq-sdk'
+import pdfParse from 'pdf-parse'
 
 export const maxDuration = 120
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+const client = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
 const PROMPT = `이 논문을 읽고 아래 6개 섹션을 한국어로 상세하게 정리해주세요.
 
@@ -30,25 +30,26 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
     const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf')
 
-    let result
-
+    let text: string
     if (isPdf) {
-      const base64 = buffer.toString('base64')
-      result = await model.generateContent([
-        {
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: base64,
-          },
-        },
-        PROMPT,
-      ])
+      const parsed = await pdfParse(buffer)
+      text = parsed.text.slice(0, 80000)
     } else {
-      const text = buffer.toString('utf-8').slice(0, 50000)
-      result = await model.generateContent(`${PROMPT}\n\n논문 전문:\n${text}`)
+      text = buffer.toString('utf-8').slice(0, 80000)
     }
 
-    const raw = result.response.text()
+    const message = await client.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 4096,
+      messages: [
+        {
+          role: 'user',
+          content: `${PROMPT}\n\n논문 전문:\n${text}`,
+        },
+      ],
+    })
+
+    const raw = message.choices[0]?.message?.content ?? ''
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       console.error('JSON 파싱 실패, 응답:', raw.slice(0, 500))
