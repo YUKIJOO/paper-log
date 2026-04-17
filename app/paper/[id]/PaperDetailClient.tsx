@@ -381,7 +381,49 @@ export default function PaperDetailClient({ id }: { id: string }) {
                     </div>
                   ) : isFilled ? (
                     <div className="px-6 py-4 prose-custom text-sm">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          table: ({ children }) => (
+                            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', margin: '1.25em 0' }}>
+                              <table style={{
+                                width: '100%',
+                                borderCollapse: 'collapse',
+                                fontSize: '0.82rem',
+                                border: '1px solid var(--border)',
+                                borderRadius: '10px',
+                                overflow: 'hidden',
+                              }}>{children}</table>
+                            </div>
+                          ),
+                          thead: ({ children }) => (
+                            <thead style={{ background: 'var(--accent-light)' }}>{children}</thead>
+                          ),
+                          th: ({ children }) => (
+                            <th style={{
+                              padding: '10px 14px',
+                              textAlign: 'left',
+                              fontWeight: 600,
+                              color: 'var(--accent)',
+                              borderBottom: '1px solid var(--border)',
+                              whiteSpace: 'nowrap',
+                              fontSize: '0.8rem',
+                            }}>{children}</th>
+                          ),
+                          td: ({ children }) => (
+                            <td style={{
+                              padding: '9px 14px',
+                              color: 'var(--text-secondary)',
+                              borderBottom: '1px solid var(--border)',
+                              lineHeight: '1.6',
+                              verticalAlign: 'top',
+                            }}>{children}</td>
+                          ),
+                          tr: ({ children }) => (
+                            <tr style={{ borderBottom: '1px solid var(--border)' }}>{children}</tr>
+                          ),
+                        }}
+                      >{content}</ReactMarkdown>
                     </div>
                   ) : (
                     <button

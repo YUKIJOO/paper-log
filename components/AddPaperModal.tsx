@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Paper, PaperStatus } from '@/lib/types'
 import { addPaper, generateId } from '@/lib/storage'
 
@@ -9,33 +9,45 @@ interface Props {
   onAdded: () => void
 }
 
+interface SearchResult {
+  paperId: string
+  title: string
+  authors: string
+  year: string
+  venue: string
+  url: string
+  abstract: string
+}
+
 const CATEGORIES = ['NLP', 'CV', 'RL', 'ML', 'Multimodal', 'AI Safety', 'Robotics', '기타']
 
-async function fetchPaperInfo(title: string) {
+async function searchPapers(query: string): Promise<SearchResult[]> {
   const res = await fetch(
-    `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(title)}&limit=1&fields=title,authors,year,venue,externalIds,abstract`
+    `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=6&fields=title,authors,year,venue,externalIds,abstract`
   )
-  if (!res.ok) return null
+  if (!res.ok) return []
   const data = await res.json()
-  const paper = data.data?.[0]
-  if (!paper) return null
-
-  const arxivId = paper.externalIds?.ArXiv
-  const doi = paper.externalIds?.DOI
-  const url = arxivId
-    ? `https://arxiv.org/abs/${arxivId}`
-    : doi
-    ? `https://doi.org/${doi}`
-    : ''
-
-  return {
-    title: paper.title ?? '',
-    authors: (paper.authors ?? []).map((a: { name: string }) => a.name).join(', '),
-    year: paper.year?.toString() ?? '',
-    venue: paper.venue ?? '',
-    url,
-    abstract: paper.abstract ?? '',
-  }
+  return (data.data ?? []).map((p: {
+    paperId: string
+    title?: string
+    authors?: { name: string }[]
+    year?: number
+    venue?: string
+    externalIds?: { ArXiv?: string; DOI?: string }
+    abstract?: string
+  }) => {
+    const arxivId = p.externalIds?.ArXiv
+    const doi = p.externalIds?.DOI
+    return {
+      paperId: p.paperId,
+      title: p.title ?? '',
+      authors: (p.authors ?? []).map((a: { name: string }) => a.name).join(', '),
+      year: p.year?.toString() ?? '',
+      venue: p.venue ?? '',
+      url: arxivId ? `https://arxiv.org/abs/${arxivId}` : doi ? `https://doi.org/${doi}` : '',
+      abstract: p.abstract ?? '',
+    }
+  })
 }
 
 export default function AddPaperModal({ onClose, onAdded }: Props) {
@@ -52,32 +64,68 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
     rating: 0,
     tags: '',
   })
-  const [fetching, setFetching] = useState(false)
-  const [fetchResult, setFetchResult] = useState<'success' | 'fail' | null>(null)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [selected, setSelected] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const handleAutoFill = async () => {
-    if (!form.title.trim()) return
-    setFetching(true)
-    setFetchResult(null)
-    const info = await fetchPaperInfo(form.title.trim())
-    setFetching(false)
-    if (!info) { setFetchResult('fail'); return }
+  // 타이핑 시 디바운스 검색
+  useEffect(() => {
+    if (selected || query.trim().length < 2) {
+      setResults([])
+      setShowDropdown(false)
+      return
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true)
+      const found = await searchPapers(query.trim())
+      setResults(found)
+      setShowDropdown(found.length > 0)
+      setSearching(false)
+    }, 400)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [query, selected])
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleSelect = (r: SearchResult) => {
     setForm(prev => ({
       ...prev,
-      title: info.title || prev.title,
-      authors: info.authors || prev.authors,
-      year: info.year || prev.year,
-      venue: info.venue || prev.venue,
-      url: info.url || prev.url,
-      abstract: info.abstract || prev.abstract,
+      title: r.title || prev.title,
+      authors: r.authors || prev.authors,
+      year: r.year || prev.year,
+      venue: r.venue || prev.venue,
+      url: r.url || prev.url,
+      abstract: r.abstract || prev.abstract,
     }))
-    setFetchResult('success')
+    setQuery(r.title)
+    setSelected(true)
+    setShowDropdown(false)
+    setResults([])
+  }
+
+  const handleQueryChange = (v: string) => {
+    setQuery(v)
+    setForm(prev => ({ ...prev, title: v }))
+    setSelected(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title.trim()) return
-
     const now = new Date().toISOString()
     const paper: Paper = {
       id: generateId(),
@@ -151,66 +199,81 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {/* Title + 자동 채우기 */}
+          {/* Title 검색 */}
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
               제목 <span style={{ color: 'var(--accent)' }}>*</span>
             </label>
-            <div className="flex gap-2">
-              <input
-                value={form.title}
-                onChange={e => { set('title', e.target.value); setFetchResult(null) }}
-                placeholder="논문 제목을 입력하세요"
-                required
-                className={`${inputClass} flex-1`}
-                style={inputStyle}
-                onFocus={onFocus}
-                onBlur={onBlur}
-              />
-              <button
-                type="button"
-                onClick={handleAutoFill}
-                disabled={fetching || !form.title.trim()}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all disabled:opacity-40"
-                style={{
-                  background: fetchResult === 'success' ? '#10b98120' : 'var(--accent-light)',
-                  color: fetchResult === 'success' ? '#10b981' : 'var(--accent)',
-                  border: `1px solid ${fetchResult === 'success' ? '#10b98140' : 'var(--accent-light)'}`,
-                }}
-              >
-                {fetching ? (
-                  <>
-                    <svg className="animate-spin" width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="14" strokeDashoffset="5" />
+            <div className="relative" ref={dropdownRef}>
+              <div className="relative">
+                <input
+                  value={query}
+                  onChange={e => handleQueryChange(e.target.value)}
+                  onFocus={e => {
+                    onFocus(e)
+                    if (results.length > 0) setShowDropdown(true)
+                  }}
+                  placeholder="논문 제목을 입력하면 자동으로 검색돼요"
+                  required
+                  className={inputClass}
+                  style={{ ...inputStyle, paddingRight: '2.5rem' }}
+                />
+                {/* 검색 중 스피너 / 선택 완료 체크 */}
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                  {searching ? (
+                    <svg className="animate-spin" width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: 'var(--text-muted)' }}>
+                      <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="17" strokeDashoffset="6" />
                     </svg>
-                    검색 중
-                  </>
-                ) : fetchResult === 'success' ? (
-                  <>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  ) : selected ? (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: '#10b981' }}>
+                      <path d="M2.5 7l3.5 3.5 5.5-5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    완료
-                  </>
-                ) : (
-                  <>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <circle cx="5.5" cy="5.5" r="3.5" stroke="currentColor" strokeWidth="1.2" />
-                      <path d="M9 9l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  ) : query.length >= 2 ? (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: 'var(--text-muted)' }}>
+                      <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M10.5 10.5l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                     </svg>
-                    자동 채우기
-                  </>
-                )}
-              </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* 검색 결과 드롭다운 */}
+              {showDropdown && (
+                <div
+                  className="absolute z-10 w-full mt-1.5 rounded-xl overflow-hidden shadow-xl"
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+                >
+                  {results.map((r, i) => (
+                    <button
+                      key={r.paperId}
+                      type="button"
+                      onClick={() => handleSelect(r)}
+                      className="w-full text-left px-4 py-3 transition-colors"
+                      style={{
+                        borderBottom: i < results.length - 1 ? '1px solid var(--border)' : 'none',
+                        background: 'transparent',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <p
+                        className="text-sm font-medium leading-snug mb-0.5 line-clamp-2"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        {r.title}
+                      </p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {[r.authors.split(',')[0]?.trim() + (r.authors.includes(',') ? ' 외' : ''), r.venue, r.year]
+                          .filter(Boolean).join(' · ')}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            {fetchResult === 'fail' && (
-              <p className="text-xs mt-1.5" style={{ color: '#ef4444' }}>
-                논문을 찾지 못했어요. 직접 입력해주세요.
-              </p>
-            )}
-            {fetchResult === 'success' && (
+            {selected && (
               <p className="text-xs mt-1.5" style={{ color: '#10b981' }}>
-                정보를 자동으로 채웠어요. 확인 후 수정하세요.
+                정보를 자동으로 채웠어요. 아래에서 확인 후 수정하세요.
               </p>
             )}
           </div>
