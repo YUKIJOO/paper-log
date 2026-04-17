@@ -5,6 +5,8 @@ export interface Paper {
   title: string
   authors: string[]
   venue: string
+  volume?: string
+  issue?: string
   year: number
   url: string
   abstract: string

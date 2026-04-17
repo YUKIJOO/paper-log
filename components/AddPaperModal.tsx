@@ -55,6 +55,8 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
     title: '',
     authors: '',
     venue: '',
+    volume: '',
+    issue: '',
     year: new Date().getFullYear().toString(),
     url: '',
     abstract: '',
@@ -132,6 +134,8 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
       title: form.title.trim(),
       authors: form.authors.split(',').map(a => a.trim()).filter(Boolean),
       venue: form.venue.trim(),
+      volume: form.volume.trim() || undefined,
+      issue: form.issue.trim() || undefined,
       year: parseInt(form.year) || new Date().getFullYear(),
       url: form.url.trim(),
       abstract: form.abstract.trim(),
@@ -320,6 +324,38 @@ export default function AddPaperModal({ onClose, onAdded }: Props) {
                 type="number"
                 min="1900"
                 max="2099"
+                className={inputClass}
+                style={inputStyle}
+                onFocus={onFocus}
+                onBlur={onBlur}
+              />
+            </div>
+          </div>
+
+          {/* Volume + Issue */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                Volume <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(선택)</span>
+              </label>
+              <input
+                value={form.volume}
+                onChange={e => set('volume', e.target.value)}
+                placeholder="예: 42"
+                className={inputClass}
+                style={inputStyle}
+                onFocus={onFocus}
+                onBlur={onBlur}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                Issue <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(선택)</span>
+              </label>
+              <input
+                value={form.issue}
+                onChange={e => set('issue', e.target.value)}
+                placeholder="예: 3"
                 className={inputClass}
                 style={inputStyle}
                 onFocus={onFocus}
